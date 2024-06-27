@@ -30,9 +30,17 @@ ext_help = (
 )
 rm_help = "remove the original image after converting"
 dither_help = "enables dithering"
+batch_processing_input_extension_help = "Sets input extension in batch processing.  For example, \".png\" without quotes."
+batch_processing_path_help = "Sets input path in batch processing."
+batch_processing_help = ("Enables processing of whole folder. Put path to the folder in --batch-processing-patch argument. "
+    "Put input extension in --batch-processing-input-extension argument. "
+    "Put output extension in --extension argument. "
+    "The program will recursively process every file in the folder of the specified input extension. "
+    "The result will appear in output folder."
+)
 
 parser = argparse.ArgumentParser(description=desc)
-parser.add_argument("files", help=files_help, nargs='+')
+parser.add_argument("files", nargs='*', help=files_help)
 nfp_group = parser.add_argument_group("nfp arguments", description=nfp_desc)
 nfp_group.add_argument("--skip-resize", "-s", help=skip_help,
                        action="store_true", default=False)
@@ -46,10 +54,45 @@ im_group.add_argument("--format", "-f", help=format_help, metavar="FORMAT",
 im_group.add_argument("--extension", "-e", help=ext_help)
 im_group.add_argument("--remove", "-r", help=rm_help, action="store_true")
 im_group.add_argument("--dither", "-d", help=dither_help, action="store_true")
+im_group.add_argument("--batch-processing-input-extension", "-bpei", help=batch_processing_input_extension_help, default = False)
+im_group.add_argument("--batch-processing-path", "-bpp", help=batch_processing_path_help, default = False)
+im_group.add_argument("--batch-processing", "-bp", help=batch_processing_help, action="store_true")
 
 args = parser.parse_args()
 
-for file in args.files:
+def find_files_recursive(input_folder, extension):
+    matches = []
+    for root, _, files in os.walk(input_folder):
+        for file in files:
+            if file.endswith(extension):
+                matches.append(os.path.join(root, file))
+    return matches
+
+def recreate_folder_structure(input_folder, output_folder, target_extension, matches):
+    new_paths = []
+    
+    for file_path in matches:
+        relative_path = os.path.relpath(file_path, input_folder)
+        new_path = os.path.join(output_folder, os.path.splitext(relative_path)[0] + target_extension)
+        
+        os.makedirs(os.path.dirname(new_path), exist_ok=True)
+        new_paths.append(new_path)
+        
+    return new_paths
+
+files = []
+new_files_paths = []
+if args.batch_processing:
+    if not args.batch_processing_input_extension or not args.extension or not args.batch_processing_path:
+        raise Exception("No target extension or input path")
+    files = find_files_recursive(args.batch_processing_path, args.batch_processing_input_extension)
+    output_folder = './output'
+    os.makedirs(output_folder, exist_ok=True)
+    new_files_paths = recreate_folder_structure(args.batch_processing_path, output_folder, args.extension, files)
+else:
+    files = args.files
+
+for i, file in enumerate(files):
     filename, ext = os.path.splitext(file)
     if not ext:
         parser.error("filename must have appropriate extension")
@@ -60,7 +103,10 @@ for file in args.files:
         new_ext = args.f_format.replace(" ", "").lower()
         if args.extension:
             new_ext = args.extension
-        im.save("{}.{}".format(filename, new_ext), args.f_format)
+        if not new_files_paths:
+            im.save("{}.{}".format(filename, new_ext), args.f_format)
+        else:
+            im.save(new_files_paths[i], args.f_format)
     else:
         im = Image.open(file)
         if args.skip_resize:
@@ -71,7 +117,11 @@ for file in args.files:
                 (args.resize_width, args.resize_height),
                 dither=1 if args.dither else 0
             )
-        with open("{}.nfp".format(filename), "wt") as f:
-            f.write(nfp_file)
+        if not new_files_paths:
+            with open("{}.nfp".format(filename), "wt") as f:
+                f.write(nfp_file)
+        else:
+            with open(new_files_paths[i], "wt") as f:
+                f.write(nfp_file)
     if args.remove:
         os.remove(file)
