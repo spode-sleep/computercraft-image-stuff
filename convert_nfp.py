@@ -4,6 +4,7 @@ from PIL import Image
 import nfp
 import argparse
 import os
+import shutil
 
 # default resize width/height when converting image -> nfp
 DEFAULT_WIDTH, DEFAULT_HEIGHT = 164, 81
@@ -30,14 +31,14 @@ ext_help = (
 )
 rm_help = "remove the original image after converting"
 dither_help = "enables dithering"
-batch_processing_input_extension_help = "Sets input extension in batch processing.  For example, \".png\" without quotes."
-batch_processing_path_help = "Sets input path in batch processing."
-batch_processing_help = ("Enables processing of whole folder. Put path to the folder in --batch-processing-patch argument. "
+folder_processing_help = ("Enables processing of whole folder. Put path to the folder in --batch-processing-patch argument. "
     "Put input extension in --batch-processing-input-extension argument. "
-    "Put output extension in --extension argument. "
-    "The program will recursively process every file in the folder of the specified input extension. "
-    "The result will appear in output folder."
+    "Put output extension in --extension/--f_format argument. "
+    "The program will recursively process every file of the specified input extension in the input folder. "
 )
+folder_processing_input_folder_path_help = "Sets input folder path in folder processing."
+folder_processing_output_folder_path_help = "Sets output folder path in folder processing."
+folder_processing_input_extension_help = "Sets input extension in folder processing.  For example, \".png\" without quotes."
 
 parser = argparse.ArgumentParser(description=desc)
 parser.add_argument("files", nargs='*', help=files_help)
@@ -54,13 +55,14 @@ im_group.add_argument("--format", "-f", help=format_help, metavar="FORMAT",
 im_group.add_argument("--extension", "-e", help=ext_help)
 im_group.add_argument("--remove", "-r", help=rm_help, action="store_true")
 im_group.add_argument("--dither", "-d", help=dither_help, action="store_true")
-im_group.add_argument("--batch-processing-input-extension", "-bpei", help=batch_processing_input_extension_help, default = False)
-im_group.add_argument("--batch-processing-path", "-bpp", help=batch_processing_path_help, default = False)
-im_group.add_argument("--batch-processing", "-bp", help=batch_processing_help, action="store_true")
+im_group.add_argument("--folder-processing", "-fp", help=folder_processing_help, action="store_true")
+im_group.add_argument("--folder-processing-input-folder-path", "-fpif", help=folder_processing_input_folder_path_help)
+im_group.add_argument("--folder-processing-output-folder-path", "-fpof", help=folder_processing_output_folder_path_help)
+im_group.add_argument("--folder-processing-input-extension", "-fpie", help=folder_processing_input_extension_help)
 
 args = parser.parse_args()
 
-def find_files_recursive(input_folder, extension):
+def recursively_find_files_by_extension(input_folder, extension):
     matches = []
     for root, _, files in os.walk(input_folder):
         for file in files:
@@ -68,27 +70,37 @@ def find_files_recursive(input_folder, extension):
                 matches.append(os.path.join(root, file))
     return matches
 
-def recreate_folder_structure(input_folder, output_folder, target_extension, matches):
+def recreate_folder_structure(input_folder, output_folder, file_paths):
+    for file_path in file_paths:
+        relative_path = os.path.relpath(file_path, input_folder)
+        new_folder = os.path.join(output_folder, relative_path)
+        
+        os.makedirs(os.path.dirname(new_folder), exist_ok=True)
+
+
+def get_output_paths(input_folder, output_folder, target_extension, file_paths):
     new_paths = []
     
-    for file_path in matches:
+    for file_path in file_paths:
         relative_path = os.path.relpath(file_path, input_folder)
         new_path = os.path.join(output_folder, os.path.splitext(relative_path)[0] + target_extension)
-        
-        os.makedirs(os.path.dirname(new_path), exist_ok=True)
         new_paths.append(new_path)
         
     return new_paths
 
 files = []
 new_files_paths = []
-if args.batch_processing:
-    if not args.batch_processing_input_extension or not args.extension or not args.batch_processing_path:
-        raise Exception("No target extension or input path")
-    files = find_files_recursive(args.batch_processing_path, args.batch_processing_input_extension)
-    output_folder = './output'
-    os.makedirs(output_folder, exist_ok=True)
-    new_files_paths = recreate_folder_structure(args.batch_processing_path, output_folder, args.extension, files)
+if args.folder_processing:
+    input_folder = args.folder_processing_input_folder_path
+    output_folder = args.folder_processing_output_folder_path
+    input_extension = args.folder_processing_input_extension
+    output_extension = args.extension if args.extension else "." + args.format
+
+    if not (args.extension or args.format) or not output_extension or not output_folder or not input_folder:
+        raise Exception("No input/output extension or input/output path")
+    files = recursively_find_files_by_extension(input_folder, input_extension)
+    recreate_folder_structure(input_folder, output_folder, files)
+    new_files_paths = get_output_paths(input_folder, output_folder, output_extension, files)
 else:
     files = args.files
 
@@ -103,10 +115,10 @@ for i, file in enumerate(files):
         new_ext = args.f_format.replace(" ", "").lower()
         if args.extension:
             new_ext = args.extension
-        if not new_files_paths:
-            im.save("{}.{}".format(filename, new_ext), args.f_format)
-        else:
+        if args.folder_processing:
             im.save(new_files_paths[i], args.f_format)
+        else:
+            im.save("{}.{}".format(filename, new_ext), args.f_format)
     else:
         im = Image.open(file)
         if args.skip_resize:
@@ -117,11 +129,11 @@ for i, file in enumerate(files):
                 (args.resize_width, args.resize_height),
                 dither=1 if args.dither else 0
             )
-        if not new_files_paths:
-            with open("{}.nfp".format(filename), "wt") as f:
+        if args.folder_processing:
+            with open(new_files_paths[i], "wt") as f:
                 f.write(nfp_file)
         else:
-            with open(new_files_paths[i], "wt") as f:
+            with open("{}.nfp".format(filename), "wt") as f:
                 f.write(nfp_file)
     if args.remove:
         os.remove(file)
