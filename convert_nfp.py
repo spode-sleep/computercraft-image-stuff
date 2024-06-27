@@ -31,10 +31,12 @@ ext_help = (
 )
 rm_help = "remove the original image after converting"
 dither_help = "enables dithering"
-folder_processing_help = ("Enables processing of whole folder. Put path to the folder in --batch-processing-patch argument. "
-    "Put input extension in --batch-processing-input-extension argument. "
-    "Put output extension in --extension/--f_format argument. "
+folder_processing_help = ("Enables processing of whole folder. "
     "The program will recursively process every file of the specified input extension in the input folder. "
+    "Put path to the input folder in --folder-processing-input-folder-path argument. "
+    "Put path to the output folder in --folder-processing-output-folder-path argument. "
+    "Put input extension in --folder-processing-input-extension argument. "
+    "Put output extension in --extension/--f_format argument. "
 )
 folder_processing_input_folder_path_help = "Sets input folder path in folder processing."
 folder_processing_output_folder_path_help = "Sets output folder path in folder processing."
