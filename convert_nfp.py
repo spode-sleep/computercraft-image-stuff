@@ -90,8 +90,6 @@ def get_output_paths(input_folder, output_folder, target_extension, file_paths):
         
     return new_paths
 
-files = []
-new_files_paths = []
 if args.folder_processing:
     input_folder = args.folder_processing_input_folder_path
     output_folder = args.folder_processing_output_folder_path
